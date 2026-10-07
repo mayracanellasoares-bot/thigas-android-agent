@@ -782,6 +782,153 @@
       : [];
   }
 
+
+  function attendanceDetailsVisible() {
+    const body = norm(document.body?.innerText || '');
+    return (
+      body.includes('lancamento da frequencia detalhes') ||
+      (
+        body.includes('horario de aula') &&
+        body.includes('marcar todos como')
+      ) ||
+      (
+        body.includes('horario de aula') &&
+        body.includes('mostrar ativos e inativos')
+      )
+    );
+  }
+
+  function fieldNearLabel(labelCandidates) {
+    const wanted = labelCandidates.map(norm);
+    const labels = all('label,span,div,p,strong').filter(el => {
+      const t = text(el);
+      return wanted.some(v => t === v || t.startsWith(v));
+    });
+
+    for (const label of labels) {
+      let node = label;
+      for (let i = 0; i < 6 && node; i++, node = node.parentElement) {
+        const controls = [
+          ...node.querySelectorAll?.(
+            'select,[role="combobox"],input,button,[role="button"],.p-dropdown,.p-multiselect,.mat-mdc-select,.mat-select'
+          ) || []
+        ].filter(visible);
+
+        const candidate = controls.find(el => {
+          const t = text(el);
+          const aria = norm(el.getAttribute?.('aria-label') || '');
+          const ph = norm(el.getAttribute?.('placeholder') || '');
+          return (
+            t.includes('selecione') ||
+            aria.includes('selecione') ||
+            ph.includes('selecione') ||
+            el.tagName === 'SELECT' ||
+            el.getAttribute?.('role') === 'combobox' ||
+            String(el.className || '').toLowerCase().includes('dropdown') ||
+            String(el.className || '').toLowerCase().includes('select')
+          );
+        });
+
+        if (candidate) return candidate;
+      }
+    }
+    return null;
+  }
+
+  function openTimePicker() {
+    const field = fieldNearLabel(['Horário de Aula', 'Horario de Aula']);
+    if (!field) return {ok:false, reason:'time_picker_not_found'};
+
+    if (field.tagName === 'SELECT') {
+      return {ok:true, native:true};
+    }
+
+    const expanded = norm(field.getAttribute?.('aria-expanded') || '');
+    if (expanded !== 'true') safeClick(field);
+    return {ok:true, native:false};
+  }
+
+  function optionNodes() {
+    return all(
+      '[role="option"],li,mat-option,.mat-mdc-option,.p-dropdown-item,.p-multiselect-item,[data-pc-section="item"],div'
+    ).filter(el => {
+      const t = text(el);
+      return t && t.length < 180;
+    });
+  }
+
+  function clickOptionForRange(raw) {
+    const parts = parseRange(raw);
+    if (parts.length < 2) return false;
+    const [start,end] = parts;
+
+    const candidates = optionNodes()
+      .filter(el => {
+        const t = text(el);
+        return t.includes(start) && t.includes(end);
+      })
+      .sort((a,b) => text(a).length - text(b).length);
+
+    if (!candidates.length) return false;
+    return safeClick(candidates[0]);
+  }
+
+  function chooseTimeRanges(times) {
+    const expanded = [];
+    for (const raw of times || []) {
+      const ranges = String(raw).match(
+        /\b\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\b/g
+      );
+      if (ranges && ranges.length) expanded.push(...ranges);
+      else if (String(raw).trim()) expanded.push(String(raw));
+    }
+
+    const wanted = [...new Set(expanded)];
+    if (!wanted.length) return {ok:true, selected:0, requested:0, wanted};
+
+    const field = fieldNearLabel(['Horário de Aula', 'Horario de Aula']);
+    if (field?.tagName === 'SELECT') {
+      let selected = 0;
+      for (const w of wanted) {
+        const parts = parseRange(w);
+        const opt = [...field.options].find(o => {
+          const t = norm(o.textContent || '');
+          return parts.length === 2 && t.includes(parts[0]) && t.includes(parts[1]);
+        });
+        if (opt) {
+          opt.selected = true;
+          selected++;
+        }
+      }
+      dispatch(field);
+      return {ok:selected >= wanted.length, selected, requested:wanted.length, wanted, native:true};
+    }
+
+    let selected = 0;
+    let opened = openTimePicker().ok;
+
+    for (let i = 0; i < wanted.length; i++) {
+      if (!opened) break;
+
+      if (clickOptionForRange(wanted[i])) {
+        selected++;
+      }
+
+      if (i < wanted.length - 1) {
+        const stillVisible = optionNodes().some(el => {
+          const t = text(el);
+          const next = parseRange(wanted[i + 1]);
+          return next.length === 2 && t.includes(next[0]) && t.includes(next[1]);
+        });
+        if (!stillVisible) {
+          opened = openTimePicker().ok;
+        }
+      }
+    }
+
+    return {ok:selected >= wanted.length, selected, requested:wanted.length, wanted, native:false};
+  }
+
   function clickTimeRange(
     raw
   ) {
@@ -1211,6 +1358,16 @@
       phase ===
       'open_frequency'
     ) {
+      if (attendanceDetailsVisible()) {
+        return {
+          ...out,
+          nextPhase:
+            'attendance_periods',
+          message:
+            'Lançamento da frequência já aberto'
+        };
+      }
+
       if (
         body.includes(
           'lancamento da frequencia'
@@ -1254,6 +1411,16 @@
       phase ===
       'attendance_filters'
     ) {
+      if (attendanceDetailsVisible()) {
+        return {
+          ...out,
+          nextPhase:
+            'attendance_periods',
+          message:
+            'Turma e disciplina já definidas no lançamento'
+        };
+      }
+
       if (
         body.includes(
           'horario de aula'
