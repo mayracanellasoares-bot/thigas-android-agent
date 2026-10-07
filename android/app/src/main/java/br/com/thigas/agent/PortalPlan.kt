@@ -7,4 +7,12 @@ data class PortalPlan(
     val content: String,
     val periodSlots: List<String>,
     val absentees: List<String> = emptyList()
-)
+) {
+    fun key(): String =
+        listOf(
+            date,
+            className,
+            subject,
+            periodSlots.firstOrNull().orEmpty()
+        ).joinToString("|")
+}
