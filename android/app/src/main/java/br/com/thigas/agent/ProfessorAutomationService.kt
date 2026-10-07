@@ -32,10 +32,12 @@ class ProfessorAutomationService : Service() {
     private lateinit var script: String
     private var wakeLock: PowerManager.WakeLock? = null
     private var pageReady = false
+    private var sessionRestored = false
 
     override fun onCreate() {
         super.onCreate()
         stopped = false
+        sessionRestored = false
 
         NotificationHelper.createChannels(this)
         startForeground(
@@ -107,6 +109,27 @@ class ProfessorAutomationService : Service() {
                     }
 
                     pageReady = true
+
+                    if (!sessionRestored) {
+                        val snapshot =
+                            SessionVault.load(this@ProfessorAutomationService)
+
+                        if (snapshot == null) {
+                            fail(
+                                "Thigas · sessão não vinculada",
+                                "Abra o app, faça o login manualmente, entre na visão ADM e toque em Vincular sessão ADM."
+                            )
+                            return
+                        }
+
+                        restoreWebStorage(
+                            view,
+                            snapshot
+                        )
+
+                        return
+                    }
+
                     postMain(1600) {
                         runStoredState()
                     }
@@ -128,6 +151,16 @@ class ProfessorAutomationService : Service() {
         }
 
         val action = intent?.action ?: ACTION_RESUME
+        val snapshot =
+            SessionVault.load(this)
+
+        if (snapshot == null) {
+            fail(
+                "Thigas · sessão não vinculada",
+                "Entre manualmente na Sala do Futuro, abra a visão ADM e toque em Vincular sessão ADM."
+            )
+            return START_NOT_STICKY
+        }
 
         if (
             action == ACTION_START ||
@@ -135,15 +168,146 @@ class ProfessorAutomationService : Service() {
             webView.url.isNullOrBlank()
         ) {
             pageReady = false
-            updateForeground(
-                "Entrando na Sala do Futuro para ${plan.className}…"
+            sessionRestored = false
+
+            restoreCookies(
+                snapshot
             )
-            webView.loadUrl(PORTAL)
+
+            updateForeground(
+                "Restaurando sua sessão da Sala do Futuro para ${plan.className}…"
+            )
+
+            val target =
+                snapshot.url.takeIf {
+                    it.contains(
+                        "educacao.sp.gov.br"
+                    )
+                } ?: PORTAL
+
+            webView.loadUrl(
+                target
+            )
         } else {
             runStoredState()
         }
 
         return START_NOT_STICKY
+    }
+
+    private fun restoreCookies(
+        snapshot: SessionVault.Snapshot
+    ) {
+        val manager =
+            CookieManager.getInstance()
+
+        manager.setAcceptCookie(
+            true
+        )
+
+        snapshot.cookies
+            .split(";")
+            .map {
+                it.trim()
+            }
+            .filter {
+                it.contains("=")
+            }
+            .forEach {
+                cookie ->
+
+                manager.setCookie(
+                    snapshot.url,
+                    cookie
+                )
+            }
+
+        manager.flush()
+    }
+
+    private fun restoreWebStorage(
+        view: WebView,
+        snapshot: SessionVault.Snapshot
+    ) {
+        val local =
+            snapshot.localStorage
+                .ifBlank {
+                    "{}"
+                }
+
+        val session =
+            snapshot.sessionStorage
+                .ifBlank {
+                    "{}"
+                }
+
+        val js =
+            """
+            (function() {
+              try {
+                const localValues = $local;
+                const sessionValues = $session;
+
+                Object.keys(localValues).forEach(function(k) {
+                  localStorage.setItem(k, String(localValues[k] ?? ''));
+                });
+
+                Object.keys(sessionValues).forEach(function(k) {
+                  sessionStorage.setItem(k, String(sessionValues[k] ?? ''));
+                });
+
+                return JSON.stringify({
+                  ok: true,
+                  href: location.href
+                });
+              } catch (e) {
+                return JSON.stringify({
+                  ok: false,
+                  error: String(e)
+                });
+              }
+            })()
+            """.trimIndent()
+
+        view.evaluateJavascript(
+            js
+        ) {
+                raw ->
+
+            val decoded =
+                decodeJsString(
+                    raw
+                )
+
+            val result =
+                runCatching {
+                    JSONObject(
+                        decoded
+                    )
+                }.getOrNull()
+
+            if (
+                result == null ||
+                !result.optBoolean(
+                    "ok",
+                    false
+                )
+            ) {
+                fail(
+                    "Thigas · sessão inválida",
+                    "Não consegui restaurar os tokens da sessão. Abra o app e vincule a visão ADM novamente."
+                )
+                return@evaluateJavascript
+            }
+
+            sessionRestored =
+                true
+
+            CookieManager.getInstance()
+                .flush()
+
+            view.reload()
+        }
     }
 
     private fun runStoredState() {
