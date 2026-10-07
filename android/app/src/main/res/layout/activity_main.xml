@@ -33,6 +33,13 @@
             android:text="Agenda" />
     </LinearLayout>
 
+    <Button
+        android:id="@+id/btnLinkSession"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginHorizontal="8dp"
+        android:text="Vincular sessão ADM" />
+
     <androidx.appcompat.widget.SwitchCompat
         android:id="@+id/autoSwitch"
         android:layout_width="match_parent"
