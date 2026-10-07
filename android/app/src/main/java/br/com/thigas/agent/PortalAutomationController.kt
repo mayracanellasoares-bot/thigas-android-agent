@@ -27,6 +27,16 @@ class PortalAutomationController(
 
     fun isPaused(): Boolean = paused
 
+    fun isRunning(): Boolean = running.get()
+
+    fun onPageFinished() {
+        if (!running.get() || paused) return
+        handler.postDelayed(
+            { tick() },
+            350
+        )
+    }
+
     fun resume() {
         if (!running.get()) return
         paused = false
@@ -85,6 +95,15 @@ class PortalAutomationController(
 
     private fun tick() {
         if (!running.get() || paused) return
+
+        if (webView.progress < 80) {
+            onStatus("Aguardando o portal carregar…")
+            handler.postDelayed(
+                { tick() },
+                500
+            )
+            return
+        }
         if (System.currentTimeMillis() - startedAt > 180_000) {
             running.set(false); onNeedUser("Tempo esgotado. Nenhum novo clique será feito."); return
         }
