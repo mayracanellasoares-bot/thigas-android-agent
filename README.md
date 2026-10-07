@@ -1,48 +1,56 @@
-# Thigas Agent v0.8 — Professor Action Engine
+# Thigas Android Agent v0.8
 
-Esta versão adiciona um aplicativo Android nativo que abre a Sala do Futuro em WebView e executa um fluxo controlado de Frequência + Registro de aulas.
+Aplicativo Android nativo para o modo **Professor Action Engine** do Thigas.
+
+## O que está neste repositório
+
+- app Android em Kotlin;
+- WebView controlado para abrir a Sala do Futuro;
+- mapeador local do DOM;
+- executor sem coordenadas fixas;
+- confirmação explícita antes de qualquer gravação;
+- verificação das mensagens de salvamento;
+- GitHub Actions para gerar o APK automaticamente.
+
+O núcleo conversacional/agenda continua rodando localmente no **Termux**, em `127.0.0.1:8765`, usando o pacote Thigas Agent v0.8. O APK consulta esse núcleo para obter turma, disciplina, horários e conteúdo do dia.
 
 ## Segurança
 
-- login é manual;
-- JavaScript de automação só é injetado em `*.educacao.sp.gov.br`;
-- nada é injetado nas páginas `gov.br`;
-- cada lançamento exige confirmação explícita no Android;
-- se aluno, horário, botão ou confirmação não forem encontrados com segurança, o agente para;
-- não usa coordenadas fixas da tela;
-- o modo `Mapear` salva um mapa local do DOM para depuração.
+- o login é feito manualmente pelo usuário;
+- a automação só é injetada em `*.educacao.sp.gov.br`;
+- páginas `gov.br` não recebem o script de automação;
+- CPF, senha, código 2FA e cookies não são enviados à LLM;
+- o botão Salvar só pode ser acionado após confirmação explícita;
+- se aluno, horário, turma ou botão não forem identificados com segurança, o agente para e pede intervenção;
+- não usa coordenadas fixas da tela.
 
-## Arquitetura
+## Fluxo Professor
 
-- `core/`: núcleo Termux/Python, agenda, memória e chat;
-- `android/`: projeto Android Studio Kotlin;
-- `android/app/src/main/assets/portal_automation.js`: executor DOM;
-- `docs/PORTAL_MAPPING.md`: fluxo observado na gravação.
-
-## Rodar o núcleo no Termux
-
-```bash
-cd core
-bash install-termux.sh
-bash start-termux.sh
+```text
+Agenda local
+→ Sala do Futuro
+→ Diário de Classe
+→ Frequência
+→ Lançamento
+→ turma/disciplina/horários
+→ C/F dos alunos
+→ Salvar
+→ confirmar “Alterações salvas”
+→ Registro de aulas
+→ horários
+→ conteúdo
+→ Salvar
+→ confirmar “Registro salvo”
 ```
 
-O núcleo fica em `http://127.0.0.1:8765`.
+## Primeiro teste
 
-## APK
+1. Inicie o núcleo v0.8 no Termux.
+2. Instale o APK gerado pelo workflow **Build Android APK**.
+3. Abra o app e faça o login manualmente.
+4. Navegue até Diário de Classe.
+5. Use **Mapear** primeiro.
+6. Confira turma, disciplina, horários e faltosos.
+7. Só depois use **Preparar ação** e confirme.
 
-Abra a pasta `android/` no Android Studio e gere o APK (`Build > Build APK`).
-A aplicação usa `compileSdk/targetSdk 36`.
-
-## Primeiro teste recomendado
-
-1. Inicie o núcleo no Termux.
-2. Abra o APK.
-3. Toque `Sala` e faça o login manualmente.
-4. Vá ao Diário de Classe.
-5. Toque `Mapear` nas telas de Frequência e Registro de aulas.
-6. Use uma turma de teste e toque `Preparar ação`.
-7. Confira o resumo e confirme.
-8. Se o agente não identificar um elemento de forma segura, ele interrompe o fluxo.
-
-**Não use a primeira execução para um lançamento que você não possa conferir imediatamente no portal.**
+A automação real ainda precisa ser validada contra o DOM da sua sessão autenticada antes de ser considerada pronta para uso diário.
