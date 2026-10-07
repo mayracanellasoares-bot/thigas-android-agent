@@ -12,7 +12,8 @@ class PortalAutomationController(
     private val assetScript: String,
     private val onStatus: (String) -> Unit,
     private val onNeedUser: (String) -> Unit,
-    private val onDone: (String) -> Unit
+    private val onDone: (String) -> Unit,
+    private val onAttendanceReady: (PortalPlan) -> Unit
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private val running = AtomicBoolean(false)
@@ -77,6 +78,15 @@ class PortalAutomationController(
                     paused = true; onNeedUser(msg + detail(obj)); return@evaluateJavascript
                 }
                 val next = obj.optString("nextPhase")
+
+                if (next == "attendance_students") {
+                    running.set(false)
+                    paused = false
+                    phase = next
+                    onAttendanceReady(plan)
+                    return@evaluateJavascript
+                }
+
                 if (next.isNotBlank()) phase = next
                 handler.postDelayed({ tick() }, if (obj.optBoolean("waiting", false)) 1200 else 800)
             }
