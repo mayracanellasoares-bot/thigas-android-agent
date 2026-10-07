@@ -20,6 +20,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -158,6 +160,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(
+            R.id.btnLinkSession
+        ).setOnClickListener {
+            linkSession()
+        }
+
+        findViewById<Button>(
             R.id.btnPrevious
         ).setOnClickListener {
             changePlan(-1)
@@ -190,6 +198,27 @@ class MainActivity : AppCompatActivity() {
         autoSwitch.setOnCheckedChangeListener {
                 _,
                 checked ->
+
+            if (
+                checked &&
+                SessionVault.load(this) == null
+            ) {
+                ProfessorPrefs.setAutoEnabled(
+                    this,
+                    false
+                )
+                autoSwitch.isChecked = false
+
+                AlertDialog.Builder(this)
+                    .setTitle("Vincule a sessão primeiro")
+                    .setMessage(
+                        "Entre manualmente na Sala do Futuro, abra a visão ADM e toque em “Vincular sessão ADM”. Depois ative o modo automático."
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+
+                return@setOnCheckedChangeListener
+            }
 
             ProfessorPrefs.setAutoEnabled(
                 this,
@@ -224,6 +253,190 @@ class MainActivity : AppCompatActivity() {
         )
 
         loadAgenda()
+    }
+
+    private fun linkSession() {
+        val currentUrl =
+            webView.url.orEmpty()
+
+        val host =
+            runCatching {
+                Uri.parse(
+                    currentUrl
+                ).host.orEmpty()
+            }.getOrDefault("")
+
+        val portalHost =
+            host ==
+                "educacao.sp.gov.br" ||
+            host.endsWith(
+                ".educacao.sp.gov.br"
+            )
+
+        if (!portalHost) {
+            AlertDialog.Builder(this)
+                .setTitle(
+                    "Abra a visão ADM"
+                )
+                .setMessage(
+                    "Faça o login manualmente e chegue à visão ADM/Diário de Classe antes de vincular a sessão."
+                )
+                .setPositiveButton(
+                    "OK",
+                    null
+                )
+                .show()
+
+            return
+        }
+
+        val cookieManager =
+            CookieManager.getInstance()
+
+        cookieManager.flush()
+
+        val cookies =
+            cookieManager.getCookie(
+                currentUrl
+            ).orEmpty()
+
+        val js =
+            """
+            (function() {
+              const local = {};
+              const session = {};
+              for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                local[k] = localStorage.getItem(k);
+              }
+              for (let i = 0; i < sessionStorage.length; i++) {
+                const k = sessionStorage.key(i);
+                session[k] = sessionStorage.getItem(k);
+              }
+              return JSON.stringify({
+                href: location.href,
+                localStorage: local,
+                sessionStorage: session,
+                body: (document.body && document.body.innerText || '').slice(0, 2500)
+              });
+            })()
+            """.trimIndent()
+
+        webView.evaluateJavascript(
+            js
+        ) {
+                raw ->
+
+            val decoded =
+                decodeJsString(
+                    raw
+                )
+
+            val obj =
+                runCatching {
+                    JSONObject(
+                        decoded
+                    )
+                }.getOrNull()
+
+            if (obj == null) {
+                setStatus(
+                    "Não consegui capturar a sessão."
+                )
+                return@evaluateJavascript
+            }
+
+            val local =
+                obj.optJSONObject(
+                    "localStorage"
+                )?.toString()
+                    ?: "{}"
+
+            val session =
+                obj.optJSONObject(
+                    "sessionStorage"
+                )?.toString()
+                    ?: "{}"
+
+            val href =
+                obj.optString(
+                    "href",
+                    currentUrl
+                )
+
+            if (
+                cookies.isBlank() &&
+                local == "{}" &&
+                session == "{}"
+            ) {
+                AlertDialog.Builder(this)
+                    .setTitle(
+                        "Sessão não detectada"
+                    )
+                    .setMessage(
+                        "Não encontrei cookies ou tokens de sessão. Confirme que você já está dentro da sua conta e da visão ADM."
+                    )
+                    .setPositiveButton(
+                        "OK",
+                        null
+                    )
+                    .show()
+
+                return@evaluateJavascript
+            }
+
+            runCatching {
+                SessionVault.save(
+                    this,
+                    href,
+                    cookies,
+                    local,
+                    session
+                )
+            }.onSuccess {
+                cookieManager.flush()
+
+                setStatus(
+                    "Sessão ADM vinculada e criptografada."
+                )
+
+                AlertDialog.Builder(this)
+                    .setTitle(
+                        "Sessão vinculada"
+                    )
+                    .setMessage(
+                        "O Thigas salvou a sessão autenticada localmente e criptografada. Login e senha não foram armazenados. Agora você pode ativar o modo automático."
+                    )
+                    .setPositiveButton(
+                        "OK",
+                        null
+                    )
+                    .show()
+            }.onFailure {
+                setStatus(
+                    "Falha ao criptografar a sessão."
+                )
+            }
+        }
+    }
+
+    private fun decodeJsString(
+        value: String?
+    ): String {
+        if (
+            value == null ||
+            value == "null"
+        ) {
+            return "{}"
+        }
+
+        return runCatching {
+            JSONArray(
+                "[$value]"
+            ).getString(0)
+        }.getOrDefault(
+            value
+        )
     }
 
     private fun loadAgenda() {
