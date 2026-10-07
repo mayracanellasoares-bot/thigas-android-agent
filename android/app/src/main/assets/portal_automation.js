@@ -153,97 +153,215 @@
       : false;
   }
 
+  function isHomePage() {
+    const body = norm(document.body?.innerText || '');
+    return (
+      body.includes('sala do futuro servidores') ||
+      body.includes('ola,') ||
+      body.includes('mensagens nao lidas')
+    ) && !body.includes('lancamento da frequencia');
+  }
+
+  function isDiaryHome() {
+    const body = norm(document.body?.innerText || '');
+    return (
+      body.includes('diario de classe') &&
+      !body.includes('lancamento da frequencia') &&
+      !attendanceDetailsVisible()
+    );
+  }
+
+  function isFrequencyLanding() {
+    const body = norm(document.body?.innerText || '');
+    return (
+      body.includes('lancamento da frequencia') &&
+      !body.includes('lancamento da frequencia detalhes') &&
+      !attendanceDetailsVisible()
+    );
+  }
+
+  function clickInteractiveText(candidates) {
+    const wanted = candidates.map(norm);
+    const nodes = all(
+      'a,button,[role="button"],[role="menuitem"],li'
+    )
+      .filter(el => {
+        const t = text(el);
+        return t && wanted.some(v => t === v || t.includes(v));
+      })
+      .sort((a,b) => text(a).length - text(b).length);
+
+    for (const el of nodes) {
+      if (safeClick(el)) return true;
+    }
+    return false;
+  }
+
   function navigateToAttendance() {
     const body = norm(document.body?.innerText || '');
+    const currentStage = Number(sessionStorage.getItem('thigas_nav_stage') || '0');
 
     if (attendanceDetailsVisible()) {
+      sessionStorage.setItem('thigas_nav_stage', '4');
       return {
         ok: true,
         nextPhase: 'attendance_periods',
-        message: 'Lançamento da frequência já aberto'
+        message: 'Lançamento da frequência aberto'
       };
     }
 
-    if (
-      body.includes('lancamento da frequencia') &&
-      !body.includes('lancamento da frequencia detalhes')
-    ) {
-      const details = clickByTextAnywhere([
-        'detalhes',
-        'lançar frequência',
-        'lancar frequencia',
-        'lançamento',
-        'lancamento'
-      ]);
+    if (isFrequencyLanding()) {
+      sessionStorage.setItem('thigas_nav_stage', '3');
 
-      if (details) {
+      const clicked =
+        clickInteractiveText([
+          'lancamento',
+          'lançamento',
+          'detalhes',
+          'lancar',
+          'lançar'
+        ]);
+
+      if (clicked) {
         return {
           ok: true,
           waiting: true,
           nextPhase: 'open_frequency',
-          message: 'Abrindo detalhes da frequência'
+          message: 'Abrindo detalhes do lançamento'
+        };
+      }
+
+      return {
+        ok: false,
+        waiting: true,
+        retry: true,
+        nextPhase: 'open_frequency',
+        message: 'Aguardando o botão de Lançamento da Frequência'
+      };
+    }
+
+    if (isDiaryHome()) {
+      sessionStorage.setItem(
+        'thigas_nav_stage',
+        String(Math.max(currentStage, 2))
+      );
+
+      const clicked =
+        clickInteractiveText([
+          'frequencia',
+          'frequência'
+        ]);
+
+      if (clicked) {
+        return {
+          ok: true,
+          waiting: true,
+          nextPhase: 'open_frequency',
+          message: 'Abrindo Frequência'
+        };
+      }
+
+      if (openNavigationMenu()) {
+        return {
+          ok: true,
+          waiting: true,
+          nextPhase: 'open_frequency',
+          message: 'Abrindo menu do Diário de Classe'
+        };
+      }
+
+      return {
+        ok: false,
+        waiting: true,
+        retry: true,
+        nextPhase: 'open_frequency',
+        message: 'Procurando Frequência dentro do Diário de Classe'
+      };
+    }
+
+    if (isHomePage()) {
+      // Never click "Diário de Classe" again after we have already advanced
+      // to a deeper stage in this session. This prevents the Home <-> Diário loop.
+      if (currentStage >= 2) {
+        return {
+          ok: false,
+          waiting: true,
+          retry: true,
+          nextPhase: 'open_frequency',
+          message: 'Aguardando o portal concluir a navegação'
+        };
+      }
+
+      if (openNavigationMenu()) {
+        sessionStorage.setItem('thigas_nav_stage', '1');
+        return {
+          ok: true,
+          waiting: true,
+          nextPhase: 'open_frequency',
+          message: 'Abrindo menu principal'
+        };
+      }
+
+      const clicked =
+        clickInteractiveText([
+          'diario de classe',
+          'diário de classe'
+        ]);
+
+      if (clicked) {
+        sessionStorage.setItem('thigas_nav_stage', '2');
+        return {
+          ok: true,
+          waiting: true,
+          nextPhase: 'open_frequency',
+          message: 'Abrindo Diário de Classe'
+        };
+      }
+
+      return {
+        ok: false,
+        waiting: true,
+        retry: true,
+        nextPhase: 'open_frequency',
+        message: 'Procurando Diário de Classe'
+      };
+    }
+
+    // If the side menu is already open, only choose the next valid step.
+    if (currentStage <= 1) {
+      const diary =
+        clickInteractiveText([
+          'diario de classe',
+          'diário de classe'
+        ]);
+
+      if (diary) {
+        sessionStorage.setItem('thigas_nav_stage', '2');
+        return {
+          ok: true,
+          waiting: true,
+          nextPhase: 'open_frequency',
+          message: 'Entrando no Diário de Classe'
         };
       }
     }
 
-    if (
-      clickHrefLike([
-        'diario-de-classe',
-        'diario',
-        'frequencia',
-        'frequência',
-        'lancamento',
-        'lançamento'
-      ])
-    ) {
-      return {
-        ok: true,
-        waiting: true,
-        nextPhase: 'open_frequency',
-        message: 'Navegando pelo Diário de Classe'
-      };
-    }
+    if (currentStage >= 2) {
+      const frequency =
+        clickInteractiveText([
+          'frequencia',
+          'frequência'
+        ]);
 
-    if (
-      clickByTextAnywhere([
-        'diário de classe',
-        'diario de classe'
-      ])
-    ) {
-      return {
-        ok: true,
-        waiting: true,
-        nextPhase: 'open_frequency',
-        message: 'Abrindo Diário de Classe'
-      };
-    }
-
-    if (
-      clickByTextAnywhere([
-        'frequência',
-        'frequencia'
-      ])
-    ) {
-      return {
-        ok: true,
-        waiting: true,
-        nextPhase: 'open_frequency',
-        message: 'Abrindo Frequência'
-      };
-    }
-
-    if (
-      clickByTextAnywhere([
-        'lançamento',
-        'lancamento'
-      ])
-    ) {
-      return {
-        ok: true,
-        waiting: true,
-        nextPhase: 'open_frequency',
-        message: 'Abrindo Lançamento'
-      };
+      if (frequency) {
+        sessionStorage.setItem('thigas_nav_stage', '3');
+        return {
+          ok: true,
+          waiting: true,
+          nextPhase: 'open_frequency',
+          message: 'Entrando em Frequência'
+        };
+      }
     }
 
     if (openNavigationMenu()) {
@@ -251,7 +369,7 @@
         ok: true,
         waiting: true,
         nextPhase: 'open_frequency',
-        message: 'Abrindo menu do portal'
+        message: 'Abrindo navegação do portal'
       };
     }
 
@@ -260,7 +378,7 @@
       retry: true,
       waiting: true,
       nextPhase: 'open_frequency',
-      message: 'Procurando Diário de Classe no portal'
+      message: 'Aguardando a próxima etapa do portal'
     };
   }
 
@@ -1413,6 +1531,11 @@
       )
     );
   }
+
+  A.resetNavigation = () => {
+    sessionStorage.removeItem('thigas_nav_stage');
+    return true;
+  };
 
   A.scan = () => {
     const items =
