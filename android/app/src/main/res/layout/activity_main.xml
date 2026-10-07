@@ -17,12 +17,14 @@
             android:layout_height="48dp"
             android:layout_weight="1"
             android:text="Sala" />
+
         <Button
             android:id="@+id/btnMap"
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
             android:text="Mapear" />
+
         <Button
             android:id="@+id/btnAgenda"
             android:layout_width="0dp"
@@ -30,6 +32,15 @@
             android:layout_weight="1"
             android:text="Agenda" />
     </LinearLayout>
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/autoSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="4dp"
+        android:text="Modo automático por horário"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/statusText"
@@ -72,18 +83,21 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
+
             <Button
                 android:id="@+id/btnPrevious"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
                 android:text="Anterior" />
+
             <Button
                 android:id="@+id/btnAction"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="2"
                 android:text="Preparar ação" />
+
             <Button
                 android:id="@+id/btnNext"
                 android:layout_width="0dp"
