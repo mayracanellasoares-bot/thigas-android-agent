@@ -36,6 +36,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ThigasAgent-v0.9.5-auto-debug
+          name: ThigasAgent-v0.9.6-auto-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
