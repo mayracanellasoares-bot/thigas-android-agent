@@ -81,6 +81,189 @@
     return true;
   };
 
+  function clickByTextAnywhere(candidates) {
+    const wanted = candidates.map(norm);
+    const nodes = all(
+      'a,button,[role="button"],[role="menuitem"],li,div,span'
+    )
+      .filter(el => {
+        const t = text(el);
+        return t && wanted.some(v => t === v || t.includes(v));
+      })
+      .sort((a,b) => text(a).length - text(b).length);
+
+    for (const el of nodes) {
+      if (safeClick(el)) return true;
+    }
+    return false;
+  }
+
+  function clickHrefLike(parts) {
+    const wanted = parts.map(norm);
+    const links = all('a[href]').filter(el => {
+      const href = norm(el.getAttribute('href') || '');
+      const t = text(el);
+      return wanted.some(v => href.includes(v) || t.includes(v));
+    });
+    return links.length ? safeClick(links[0]) : false;
+  }
+
+  function openNavigationMenu() {
+    const direct = all(
+      'button,[role="button"],a'
+    ).find(el => {
+      const aria = norm(el.getAttribute?.('aria-label') || '');
+      const title = norm(el.getAttribute?.('title') || '');
+      const t = text(el);
+      return (
+        aria.includes('menu') ||
+        aria.includes('naveg') ||
+        aria.includes('expand') ||
+        aria.includes('abrir') ||
+        title.includes('menu') ||
+        title.includes('naveg') ||
+        t === 'menu'
+      );
+    });
+
+    if (direct && safeClick(direct)) return true;
+
+    const sideCandidates = all(
+      'button,[role="button"]'
+    ).filter(el => {
+      const r = el.getBoundingClientRect?.();
+      if (!r) return false;
+      const t = text(el);
+      return (
+        r.left < 90 &&
+        r.top > 120 &&
+        r.top < window.innerHeight * 0.75 &&
+        r.width < 100 &&
+        r.height < 100 &&
+        (
+          t === '' ||
+          t === '>' ||
+          t === '<'
+        )
+      );
+    });
+
+    return sideCandidates.length
+      ? safeClick(sideCandidates[0])
+      : false;
+  }
+
+  function navigateToAttendance() {
+    const body = norm(document.body?.innerText || '');
+
+    if (attendanceDetailsVisible()) {
+      return {
+        ok: true,
+        nextPhase: 'attendance_periods',
+        message: 'Lançamento da frequência já aberto'
+      };
+    }
+
+    if (
+      body.includes('lancamento da frequencia') &&
+      !body.includes('lancamento da frequencia detalhes')
+    ) {
+      const details = clickByTextAnywhere([
+        'detalhes',
+        'lançar frequência',
+        'lancar frequencia',
+        'lançamento',
+        'lancamento'
+      ]);
+
+      if (details) {
+        return {
+          ok: true,
+          waiting: true,
+          nextPhase: 'open_frequency',
+          message: 'Abrindo detalhes da frequência'
+        };
+      }
+    }
+
+    if (
+      clickHrefLike([
+        'diario-de-classe',
+        'diario',
+        'frequencia',
+        'frequência',
+        'lancamento',
+        'lançamento'
+      ])
+    ) {
+      return {
+        ok: true,
+        waiting: true,
+        nextPhase: 'open_frequency',
+        message: 'Navegando pelo Diário de Classe'
+      };
+    }
+
+    if (
+      clickByTextAnywhere([
+        'diário de classe',
+        'diario de classe'
+      ])
+    ) {
+      return {
+        ok: true,
+        waiting: true,
+        nextPhase: 'open_frequency',
+        message: 'Abrindo Diário de Classe'
+      };
+    }
+
+    if (
+      clickByTextAnywhere([
+        'frequência',
+        'frequencia'
+      ])
+    ) {
+      return {
+        ok: true,
+        waiting: true,
+        nextPhase: 'open_frequency',
+        message: 'Abrindo Frequência'
+      };
+    }
+
+    if (
+      clickByTextAnywhere([
+        'lançamento',
+        'lancamento'
+      ])
+    ) {
+      return {
+        ok: true,
+        waiting: true,
+        nextPhase: 'open_frequency',
+        message: 'Abrindo Lançamento'
+      };
+    }
+
+    if (openNavigationMenu()) {
+      return {
+        ok: true,
+        waiting: true,
+        nextPhase: 'open_frequency',
+        message: 'Abrindo menu do portal'
+      };
+    }
+
+    return {
+      ok: false,
+      retry: true,
+      waiting: true,
+      nextPhase: 'open_frequency',
+      message: 'Procurando Diário de Classe no portal'
+    };
+  }
+
   function exactText(
     candidates,
     selector =
@@ -1358,52 +1541,12 @@
       phase ===
       'open_frequency'
     ) {
-      if (attendanceDetailsVisible()) {
-        return {
-          ...out,
-          nextPhase:
-            'attendance_periods',
-          message:
-            'Lançamento da frequência já aberto'
-        };
-      }
-
-      if (
-        body.includes(
-          'lancamento da frequencia'
-        )
-      ) {
-        return {
-          ...out,
-          nextPhase:
-            'attendance_filters',
-          message:
-            'Tela de frequência aberta'
-        };
-      }
-
-      if (
-        clickInSection(
-          'Frequência',
-          'Lançamento'
-        )
-      ) {
-        return {
-          ...out,
-          nextPhase:
-            'attendance_filters',
-          message:
-            'Abrindo Frequência > Lançamento'
-        };
-      }
+      const nav =
+        navigateToAttendance();
 
       return {
         ...out,
-        ok: false,
-        needsUser:
-          true,
-        message:
-          'Não encontrei Frequência > Lançamento. Use Mapear.'
+        ...nav
       };
     }
 
