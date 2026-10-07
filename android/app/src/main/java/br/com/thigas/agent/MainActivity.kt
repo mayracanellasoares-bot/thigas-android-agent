@@ -166,6 +166,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(
+            R.id.btnTestNow
+        ).setOnClickListener {
+            testAutomaticNow()
+        }
+
+        findViewById<Button>(
             R.id.btnPrevious
         ).setOnClickListener {
             changePlan(-1)
@@ -253,6 +259,74 @@ class MainActivity : AppCompatActivity() {
         )
 
         loadAgenda()
+    }
+
+    private fun testAutomaticNow() {
+        val snapshot =
+            SessionVault.load(this)
+
+        if (snapshot == null) {
+            AlertDialog.Builder(this)
+                .setTitle("Sessão ADM não vinculada")
+                .setMessage(
+                    "Entre manualmente na Sala do Futuro, abra a visão ADM e toque em “Vincular sessão ADM” antes de testar."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        if (plans.isEmpty()) {
+            Toast.makeText(
+                this,
+                "Carregue a agenda primeiro.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        val plan =
+            plans[planIndex].copy(
+                content = "",
+                absentees = emptyList()
+            )
+
+        val existing =
+            ProfessorPrefs.activePlan(this)
+
+        if (existing != null) {
+            ProfessorPrefs.clearActive(this)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Testar automático agora")
+            .setMessage(
+                "O Thigas vai abrir a Sala do Futuro sozinho para ${plan.className} · ${plan.subject}, navegar até a frequência e então perguntar quem faltou. Nada será salvo antes da sua resposta. Continuar?"
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("TESTAR") { _, _ ->
+                ProfessorPrefs.saveActive(
+                    this,
+                    plan,
+                    "open_frequency"
+                )
+
+                setStatus(
+                    "Teste automático iniciado para ${plan.className}."
+                )
+
+                ContextCompat.startForegroundService(
+                    this,
+                    Intent(
+                        this,
+                        ProfessorAutomationService::class.java
+                    ).apply {
+                        action =
+                            ProfessorAutomationService.ACTION_START
+                    }
+                )
+            }
+            .show()
     }
 
     private fun linkSession() {
