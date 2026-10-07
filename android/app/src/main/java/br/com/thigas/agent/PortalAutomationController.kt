@@ -48,7 +48,17 @@ class PortalAutomationController(
         phase = "open_frequency"
         startedAt = System.currentTimeMillis()
         onStatus("Iniciando ação para ${plan.className}…")
-        tick()
+
+        ensureInjected {
+            webView.evaluateJavascript(
+                "window.ThigasPortal.resetNavigation ? window.ThigasPortal.resetNavigation() : true"
+            ) {
+                handler.postDelayed(
+                    { tick() },
+                    150
+                )
+            }
+        }
     }
 
     fun continueAfterManualStep() {
