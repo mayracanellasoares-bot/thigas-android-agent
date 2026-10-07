@@ -13,7 +13,8 @@ class PortalAutomationController(
     private val onStatus: (String) -> Unit,
     private val onNeedUser: (String) -> Unit,
     private val onDone: (String) -> Unit,
-    private val onAttendanceReady: (PortalPlan) -> Unit
+    private val onAttendanceReady: (PortalPlan) -> Unit,
+    private val onLessonReady: (PortalPlan) -> Unit
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private val running = AtomicBoolean(false)
@@ -56,6 +57,22 @@ class PortalAutomationController(
         handler.postDelayed({ tick() }, 250)
     }
 
+    fun provideAbsentees(absentees: List<String>) {
+        this.plan = this.plan.copy(absentees = absentees)
+        this.phase = "attendance_students"
+        paused = false
+        running.set(true)
+        handler.postDelayed({ tick() }, 250)
+    }
+
+    fun provideLesson(content: String) {
+        this.plan = this.plan.copy(content = content)
+        this.phase = "lesson_form"
+        paused = false
+        running.set(true)
+        handler.postDelayed({ tick() }, 250)
+    }
+
     private fun tick() {
         if (!running.get() || paused) return
         if (System.currentTimeMillis() - startedAt > 180_000) {
@@ -84,6 +101,14 @@ class PortalAutomationController(
                     paused = false
                     phase = next
                     onAttendanceReady(plan)
+                    return@evaluateJavascript
+                }
+
+                if (next == "lesson_form" && plan.content.isBlank()) {
+                    running.set(false)
+                    paused = false
+                    phase = next
+                    onLessonReady(plan)
                     return@evaluateJavascript
                 }
 
