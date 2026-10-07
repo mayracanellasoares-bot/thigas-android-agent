@@ -33,11 +33,13 @@ class ProfessorAutomationService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var pageReady = false
     private var sessionRestored = false
+    private var navigationReset = false
 
     override fun onCreate() {
         super.onCreate()
         stopped = false
         sessionRestored = false
+        navigationReset = false
 
         NotificationHelper.createChannels(this)
         startForeground(
@@ -312,6 +314,20 @@ class ProfessorAutomationService : Service() {
 
     private fun runStoredState() {
         if (!pageReady || busy.get()) return
+
+        if (!navigationReset) {
+            navigationReset = true
+            webView.evaluateJavascript(script) {
+                webView.evaluateJavascript(
+                    "window.ThigasPortal.resetNavigation ? window.ThigasPortal.resetNavigation() : true"
+                ) {
+                    postMain(150) {
+                        runStoredState()
+                    }
+                }
+            }
+            return
+        }
 
         val plan = ProfessorPrefs.activePlan(this) ?: run {
             stopSafely()
