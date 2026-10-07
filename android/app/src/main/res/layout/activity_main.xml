@@ -40,6 +40,13 @@
         android:layout_marginHorizontal="8dp"
         android:text="Vincular sessão ADM" />
 
+    <Button
+        android:id="@+id/btnTestNow"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginHorizontal="8dp"
+        android:text="Testar automático agora" />
+
     <androidx.appcompat.widget.SwitchCompat
         android:id="@+id/autoSwitch"
         android:layout_width="match_parent"
