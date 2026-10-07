@@ -63,7 +63,9 @@ class MainActivity : AppCompatActivity() {
                 script,
                 ::setStatus,
                 ::showNeedUser,
-                ::showDone
+                ::showDone,
+                ::onVisibleAttendanceReady,
+                ::onVisibleLessonReady
             )
 
         webView.settings.javaScriptEnabled = true
@@ -305,28 +307,155 @@ class MainActivity : AppCompatActivity() {
             )
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("TESTAR") { _, _ ->
-                ProfessorPrefs.saveActive(
-                    this,
-                    plan,
-                    "open_frequency"
-                )
-
                 setStatus(
-                    "Teste automático iniciado para ${plan.className}."
+                    "Teste automático visível iniciado para ${plan.className}."
                 )
 
-                ContextCompat.startForegroundService(
-                    this,
-                    Intent(
-                        this,
-                        ProfessorAutomationService::class.java
-                    ).apply {
-                        action =
-                            ProfessorAutomationService.ACTION_START
-                    }
+                automation.start(
+                    plan
                 )
             }
             .show()
+    }
+
+    private fun onVisibleAttendanceReady(
+        plan: PortalPlan
+    ) {
+        runOnUiThread {
+            setStatus(
+                "Frequência pronta para ${plan.className}. Informe os faltosos."
+            )
+
+            val input =
+                EditText(this).apply {
+                    hint =
+                        "Ex.: Ágatha, João — ou ninguém"
+
+                    setText(
+                        "ninguém"
+                    )
+                }
+
+            AlertDialog.Builder(this)
+                .setTitle("Quem faltou?")
+                .setMessage(
+                    "O Thigas chegou à frequência de ${plan.className}. Informe os nomes separados por vírgula, ou deixe “ninguém”."
+                )
+                .setView(input)
+                .setNegativeButton(
+                    "Cancelar teste"
+                ) { _, _ ->
+                    automation.stop()
+                    setStatus(
+                        "Teste automático cancelado."
+                    )
+                }
+                .setPositiveButton(
+                    "CONTINUAR"
+                ) { _, _ ->
+                    val absentees =
+                        ReplyParser.absentees(
+                            input.text
+                                .toString()
+                        )
+
+                    absenteesInput.setText(
+                        if (
+                            absentees.isEmpty()
+                        ) {
+                            "ninguém"
+                        } else {
+                            absentees.joinToString(
+                                ", "
+                            )
+                        }
+                    )
+
+                    setStatus(
+                        if (
+                            absentees.isEmpty()
+                        ) {
+                            "Todos presentes. Continuando frequência…"
+                        } else {
+                            "Faltosos: ${
+                                absentees.joinToString(
+                                    ", "
+                                )
+                            }. Continuando frequência…"
+                        }
+                    )
+
+                    automation.provideAbsentees(
+                        absentees
+                    )
+                }
+                .show()
+        }
+    }
+
+    private fun onVisibleLessonReady(
+        plan: PortalPlan
+    ) {
+        runOnUiThread {
+            setStatus(
+                "Frequência concluída. Informe o conteúdo da aula."
+            )
+
+            val input =
+                EditText(this).apply {
+                    hint =
+                        "Conteúdo ministrado"
+                    setText(
+                        plans.getOrNull(
+                            planIndex
+                        )?.content.orEmpty()
+                    )
+                    minLines = 3
+                    maxLines = 6
+                }
+
+            AlertDialog.Builder(this)
+                .setTitle("O que foi dado na aula?")
+                .setMessage(
+                    "Informe o conteúdo ministrado em ${plan.className}. O Thigas usará este texto no Registro de Aula."
+                )
+                .setView(input)
+                .setNegativeButton(
+                    "Cancelar teste"
+                ) { _, _ ->
+                    automation.stop()
+                    setStatus(
+                        "Teste automático cancelado."
+                    )
+                }
+                .setPositiveButton(
+                    "CONTINUAR"
+                ) { _, _ ->
+                    val content =
+                        ReplyParser.lesson(
+                            input.text
+                                .toString()
+                        )
+
+                    if (
+                        content.isBlank()
+                    ) {
+                        setStatus(
+                            "Conteúdo vazio. Teste interrompido."
+                        )
+                        automation.stop()
+                    } else {
+                        setStatus(
+                            "Conteúdo recebido. Preparando Registro de Aula…"
+                        )
+
+                        automation.provideLesson(
+                            content
+                        )
+                    }
+                }
+                .show()
+        }
     }
 
     private fun linkSession() {
