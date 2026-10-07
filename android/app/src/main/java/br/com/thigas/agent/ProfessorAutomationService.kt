@@ -26,7 +26,7 @@ class ProfessorAutomationService : Service() {
         private const val WAIT_LESSON = "WAIT_LESSON"
     }
 
-    private val handler = Handler(Looper.getMainLooper())
+    @Volatile private var stopped = false
     private val busy = AtomicBoolean(false)
     private lateinit var webView: WebView
     private lateinit var script: String
@@ -35,6 +35,7 @@ class ProfessorAutomationService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        stopped = false
 
         NotificationHelper.createChannels(this)
         startForeground(
@@ -106,10 +107,9 @@ class ProfessorAutomationService : Service() {
                     }
 
                     pageReady = true
-                    handler.postDelayed(
-                        { runStoredState() },
-                        1600
-                    )
+                    postMain(1600) {
+                        runStoredState()
+                    }
                 }
             }
         }
@@ -277,15 +277,12 @@ class ProfessorAutomationService : Service() {
                     obj.optString("nextPhase")
 
                 if (next.isBlank()) {
-                    handler.postDelayed(
-                        {
-                            runPhase(
-                                plan,
-                                phase
-                            )
-                        },
-                        1300
-                    )
+                    postMain(1300) {
+                        runPhase(
+                            plan,
+                            phase
+                        )
+                    }
                     return@evaluateJavascript
                 }
 
@@ -333,13 +330,7 @@ class ProfessorAutomationService : Service() {
                     next
                 )
 
-                handler.postDelayed(
-                    {
-                        runPhase(
-                            plan,
-                            next
-                        )
-                    },
+                postMain(
                     if (
                         obj.optBoolean(
                             "waiting",
@@ -350,9 +341,30 @@ class ProfessorAutomationService : Service() {
                     } else {
                         1100
                     }
-                )
+                ) {
+                    runPhase(
+                        plan,
+                        next
+                    )
+                }
             }
         }
+    }
+
+    private fun postMain(
+        delayMs: Long,
+        block: () -> Unit
+    ) {
+        Handler(
+            Looper.getMainLooper()
+        ).postDelayed(
+            {
+                if (!stopped) {
+                    block()
+                }
+            },
+            delayMs
+        )
     }
 
     private fun decodeJsString(
@@ -416,6 +428,8 @@ class ProfessorAutomationService : Service() {
     }
 
     private fun stopSafely() {
+        stopped = true
+
         if (::webView.isInitialized) {
             runCatching {
                 webView.stopLoading()
@@ -439,6 +453,8 @@ class ProfessorAutomationService : Service() {
     }
 
     override fun onDestroy() {
+        stopped = true
+
         if (
             ::webView.isInitialized
         ) {
