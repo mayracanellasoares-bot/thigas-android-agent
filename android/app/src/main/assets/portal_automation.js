@@ -280,8 +280,7 @@
     }
 
     if (isHomePage()) {
-      // Never click "Diário de Classe" again after we have already advanced
-      // to a deeper stage in this session. This prevents the Home <-> Diário loop.
+      // Never go backwards once a deeper stage was reached.
       if (currentStage >= 2) {
         return {
           ok: false,
@@ -292,6 +291,43 @@
         };
       }
 
+      // If the menu was already opened on the previous tick, choose
+      // Diário de Classe before touching the menu button again.
+      if (currentStage === 1) {
+        const diary =
+          clickInteractiveText([
+            'diario de classe',
+            'diário de classe'
+          ]);
+
+        if (diary) {
+          sessionStorage.setItem('thigas_nav_stage', '2');
+          return {
+            ok: true,
+            waiting: true,
+            nextPhase: 'open_frequency',
+            message: 'Abrindo Diário de Classe'
+          };
+        }
+      }
+
+      // Sometimes Diário de Classe is already visible without opening a menu.
+      const directDiary =
+        clickInteractiveText([
+          'diario de classe',
+          'diário de classe'
+        ]);
+
+      if (directDiary) {
+        sessionStorage.setItem('thigas_nav_stage', '2');
+        return {
+          ok: true,
+          waiting: true,
+          nextPhase: 'open_frequency',
+          message: 'Abrindo Diário de Classe'
+        };
+      }
+
       if (openNavigationMenu()) {
         sessionStorage.setItem('thigas_nav_stage', '1');
         return {
@@ -299,22 +335,6 @@
           waiting: true,
           nextPhase: 'open_frequency',
           message: 'Abrindo menu principal'
-        };
-      }
-
-      const clicked =
-        clickInteractiveText([
-          'diario de classe',
-          'diário de classe'
-        ]);
-
-      if (clicked) {
-        sessionStorage.setItem('thigas_nav_stage', '2');
-        return {
-          ok: true,
-          waiting: true,
-          nextPhase: 'open_frequency',
-          message: 'Abrindo Diário de Classe'
         };
       }
 
