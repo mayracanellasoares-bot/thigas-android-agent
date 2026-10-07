@@ -127,6 +127,13 @@ class MainActivity : AppCompatActivity() {
                     view: WebView,
                     url: String
                 ) {
+                    if (
+                        automation.isRunning()
+                    ) {
+                        automation.onPageFinished()
+                        return
+                    }
+
                     setStatus(
                         if (
                             url.contains(
