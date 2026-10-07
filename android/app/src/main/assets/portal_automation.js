@@ -180,21 +180,46 @@
     );
   }
 
-  function clickInteractiveText(candidates) {
+  function clickTextTarget(candidates) {
     const wanted = candidates.map(norm);
-    const nodes = all(
-      'a,button,[role="button"],[role="menuitem"],li'
+
+    const candidatesFound = all(
+      'a,button,[role="button"],[role="menuitem"],li,label,div,span,p,strong'
     )
       .filter(el => {
         const t = text(el);
-        return t && wanted.some(v => t === v || t.includes(v));
+        return (
+          t &&
+          t.length <= 180 &&
+          wanted.some(v => t === v || t.includes(v))
+        );
       })
-      .sort((a,b) => text(a).length - text(b).length);
+      .sort((a,b) => {
+        const ta = text(a);
+        const tb = text(b);
+        if (ta.length !== tb.length) return ta.length - tb.length;
 
-    for (const el of nodes) {
-      if (safeClick(el)) return true;
+        const ar = a.getBoundingClientRect?.();
+        const br = b.getBoundingClientRect?.();
+        const aa = ar ? ar.width * ar.height : Number.MAX_SAFE_INTEGER;
+        const ba = br ? br.width * br.height : Number.MAX_SAFE_INTEGER;
+        return aa - ba;
+      });
+
+    for (const el of candidatesFound) {
+      const interactive =
+        el.closest?.(
+          'a,button,[role="button"],[role="menuitem"],li,label'
+        ) || el;
+
+      if (safeClick(interactive)) return true;
     }
+
     return false;
+  }
+
+  function clickInteractiveText(candidates) {
+    return clickTextTarget(candidates);
   }
 
   function navigateToAttendance() {
@@ -295,7 +320,7 @@
       // Diário de Classe before touching the menu button again.
       if (currentStage === 1) {
         const diary =
-          clickInteractiveText([
+          clickTextTarget([
             'diario de classe',
             'diário de classe'
           ]);
@@ -306,9 +331,17 @@
             ok: true,
             waiting: true,
             nextPhase: 'open_frequency',
-            message: 'Abrindo Diário de Classe'
+            message: 'Entrando no Diário de Classe'
           };
         }
+
+        return {
+          ok: false,
+          waiting: true,
+          retry: true,
+          nextPhase: 'open_frequency',
+          message: 'Menu aberto; procurando Diário de Classe'
+        };
       }
 
       // Sometimes Diário de Classe is already visible without opening a menu.
